@@ -1,0 +1,9 @@
+node_modules
+dist
+tmp-*
+index.js
+*.orig
+*.log
+*~
+*.map
+log
