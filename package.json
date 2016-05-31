@@ -1,6 +1,6 @@
 {
   "name": "@mfjs/logic",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "mfjs interface for logic programming",
   "main": "index.js",
   "scripts": {
