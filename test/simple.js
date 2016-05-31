@@ -2,6 +2,8 @@
 const M = require('@mfjs/core')
 import L from '../src/logic'
 
+//M.setContext(L)
+
 M.option({
   test: {
     CallExpression:{
@@ -32,8 +34,17 @@ describe('running logical monad', () => {
       expect(Array.from(k)).to.eql([2])
     })
   })
+  context('with alt', () => {
+    it('should convert choice alternative into a single value', () => {
+      const k = L.run(() => {
+        const v = M.alt(1,2,3)
+        return v * 10
+      })
+      expect(Array.from(k)).to.eql([10,20,30])
+    })
+  })
   context('with yield', () => {
-    it('should answer its argument', () => {
+    it('should answer yield argument', () => {
       const k = L.run(() => {
         M.yield(1)
         M.yield(2)
@@ -46,14 +57,14 @@ describe('running logical monad', () => {
       const k = L.run(() => {
         M.yield(1)
         expect().fail()
-      }).getIterator()
+      }).dfs()
       expect(k.next().value).to.eql(1)
     })
     it('should suspend execution until `next`', () => {
       const k = L.run(() => {
         expect().fail()
         M.yield(1)
-      }).getIterator()
+      }).dfs()
       expect(typeof k).to.equal('object')
     })
     it('should revert local variables values on backtracking', () => {
@@ -137,5 +148,42 @@ describe('control flow', () => {
             'i1:2','i2:2','i3:2','i4:2','i1:3','i5:3','i3:3','i4:3',
             'i1:4','i2:4','i3:4','i4:4','i5:5','i6:5')
     })
+  })
+})
+
+describe('breadth first order', () => {
+  it('should return elements in breadth first order', () => {
+    const k = L.run(() => {
+      {
+        M.yield(1)
+        M.yield(2)
+        {
+          M.yield(3)
+          M.yield(4)
+        }
+        M.yield(5)
+      } 
+      M.yield(6)
+      M.yield(7)
+      return 8
+    }).bfs()
+    // TODO: maybe associativity of yield should be changed
+    expect(Array.from(k)).to.eql([8,7,6,1,2,5,3,4])
+  })
+})
+
+describe('once function', () => {
+  it('should discard all but one answers', function() {
+    const k = L.run(() => L.once(M.reify(() => {
+        M.yield(1)
+        expect().fail()
+        M.yield(2)
+        M.yield(3)
+    })))
+    expect(Array.from(k)).to.eql([1])
+  })
+  it('should return no answers if its argument returns none', function() {
+    const k = L.run(() => L.once(M.empty()))
+    expect(Array.from(k)).to.eql([])
   })
 })

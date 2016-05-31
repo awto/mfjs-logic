@@ -6,110 +6,92 @@ class Result {
   constructor(tree) {
     this.tree = tree
   }
-  getIterator() {
-    return new ResultIterator(this);
+  dfs() {
+    return new MetaIterator(new DfsIterator(this.tree));
+  }
+  bfs() {
+    return new MetaIterator(new BfsIterator(this.tree));
   }
 }
 
-Result.prototype[Symbol.iterator] = Result.prototype.getIterator;
+Result.prototype[Symbol.iterator] = Result.prototype.dfs;
 
-class ResultIterator {
-  constructor(result) {
-    this.cur = result.tree
+class MetaIterator {
+  constructor(inner) {
+    this.inner = inner
   }
-
   next() {
-    if(!this.cur)
-      return {done:true}
-    return CC.run.call(L,() => this.cur).next(this)
+    return CC.exec.call(L,this.inner.next())
   }
 }
 
-class Tree {
-}
+MetaIterator.prototype[Symbol.iterator] = function() { return this; }
 
-class Zero extends Tree {
-  compose(other) {
-    return other;
-  }
-
-  next(i) {
-    return { done: true }
-  }
-}
-
-class One extends Tree {
-  constructor(val) {
-    super()
-    this.val = val
-  }
-
-  compose(other) {
-    return new Choice(this.val, other)
-  }
-
-  next(i) {
-    i.cur = null
-    return { value: this.val }
-  }
-
-}
-
-class Choice extends Tree {
-  constructor(head, tail) {
-    super()
-    this.head = head;
-    this.tail = tail;
-  }
-
-  compose(other) {
-    return new Choice(this.head, L.bind(this.tail, function(v) {
-      return v.compose(other);
-    }));
-  }
-
-  next(i) {
-    i.cur = this.tail
-    return { value: this.head }
+class Iterator {
+  constructor(tree) {
+    this.stack = [tree]
+  } 
+  next() {
+    if (!this.stack.length)
+      return L.pure({done: true})
+    return L.bind(this.stack.shift(), r => {
+      if (r.alts) {
+        this.advance(r.alts)
+        return this.next()
+      }
+      return L.pure({value:r.value})
+    })
   }
 }
 
-class Suspended extends Tree {
-  constructor(tail) {
-    super()
-    this.tail = tail;
+class BfsIterator extends Iterator {
+  constructor(tree) {
+    super(tree)
+  }
+  advance(alts) {
+    this.stack.push(...alts)
   }
 }
 
-const btPrompt = CC.newPrompt();
+class DfsIterator extends Iterator {
+  constructor(tree) {
+    super(tree)
+  }
+  advance(alts) {
+    this.stack.unshift(...alts)
+  }
+}
+
+const btPrompt = CC.newPrompt("bt")
 
 class LogicDefs extends CC.Defs {
   constructor() {
-    super();
+    super()
   }
-
-  reifyL(m) {
-    return CC.pushPrompt(btPrompt, CC.apply(M.liftContext(this,m)(),
-      function(v) {
-        return new One(v);
-      }));
+  level(m) {
+    return this.pushPrompt(btPrompt,
+                           this.apply(
+                             m,
+                             v => { return {value:v} }))
   }
-
-  empty() {
-    return CC.abort(btPrompt, new Zero());
+  alt(...args) {
+    return this.join(this.shift(btPrompt, sk => {
+      const len = args.length, alts = []
+      for(let i = 0; i < len; ++i)
+        alts.push(sk(args[i]))
+      return this.pure({alts})
+    }))
   }
-
-  plus(a, b) {
-    var m = this;
-    return m.join(CC.shift(btPrompt, function(sk) {
-      return m.bind(sk(a), function(f1) {
-        return f1.compose(sk(b));
-      });
-    }));
+  once(m) {
+    return this.apply(
+      (new DfsIterator(this.level(m))).next(),
+      r => r.done ? this.empty() : this.pure(r.value))
   }
-
+  exec(m) {
+    return new Result(this.level(m));
+  }
   run(m) {
-    return new Result(this.reifyL(m));
+    return this.exec(M.liftContext(this,m)())
   }
 }
 
@@ -118,3 +100,4 @@ const L = new LogicDefs()
 M.completePrototype(L,CC.ctor.prototype,true)
 
 export default L
+
